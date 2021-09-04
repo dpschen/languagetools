@@ -1,5 +1,15 @@
 # @vuedx/typecheck
 
+## 0.7.5
+
+### Patch Changes
+
+- 9277e09: Fix #169, resolve file location for diagnostics output
+- Updated dependencies [73c5ff7]
+- Updated dependencies [73c5ff7]
+  - @vuedx/vue-virtual-textdocument@0.7.5
+  - @vuedx/typescript-plugin-vue@0.7.5
+
 ## 0.7.4
 
 ### Patch Changes

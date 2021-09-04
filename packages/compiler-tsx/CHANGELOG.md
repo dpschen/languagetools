@@ -1,5 +1,21 @@
 # @vuedx/compiler-tsx
 
+## 0.8.0
+
+### Minor Changes
+
+- 73c5ff7: Use single character keys for SourceMap metadata
+
+  See `MappingMetadata` in [packages/compiler-tsx/src/generate.ts](../packages/compiler-tsx/src/generate.ts#L64).
+
+  BREAKING CHANGE: Generated sourcemap is not compatible with older versions.
+
+- c35ebff: Generate typecheckable TSX from Vue template
+
+  BREAKING: Generated code is completely different from previous version
+
+- 73c5ff7: Add new mapping type to SourceMap metadata for tagging generated-to-original mapping (only one way)
+
 ## 0.7.4
 
 ### Patch Changes

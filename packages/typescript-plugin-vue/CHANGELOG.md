@@ -1,5 +1,14 @@
 # @vuedx/typescript-plugin-vue
 
+## 0.7.5
+
+### Patch Changes
+
+- Updated dependencies [73c5ff7]
+- Updated dependencies [73c5ff7]
+  - @vuedx/vue-virtual-textdocument@0.7.5
+  - @vuedx/vue-languageservice@0.0.1
+
 ## 0.7.4
 
 ### Patch Changes

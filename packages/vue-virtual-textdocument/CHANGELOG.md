@@ -1,5 +1,16 @@
 # @vuedx/vue-virtual-textdocument
 
+## 0.7.5
+
+### Patch Changes
+
+- 73c5ff7: Use LRU cache for sourcemap lookups
+- 73c5ff7: Find precise generated locations using reverse lookup of original and then most relevant generated location
+- Updated dependencies [73c5ff7]
+- Updated dependencies [c35ebff]
+- Updated dependencies [73c5ff7]
+  - @vuedx/compiler-tsx@0.8.0
+
 ## 0.7.4
 
 ### Patch Changes
