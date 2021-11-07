@@ -792,7 +792,11 @@ function genDirectives(
   if (dir.name === 'model') {
     if (node.tag === 'input') {
       isInputModelDirective = true
-      context.write('VueDX.internal.checkModelDirectiveForDOM[', dirLoc)
+      context.write(
+        'VueDX.internal.checkModelDirectiveForDOM[',
+        dirLoc,
+        MappingKind.reverseOnly,
+      )
       const type = findProp(node, 'type', false, true)
       if (type != null && genPropValue(context, type)) {
         context.write(' as const')
@@ -802,26 +806,40 @@ function genDirectives(
       context.write('](')
     } else if (node.tag === 'select') {
       isInputModelDirective = true
-      context.write('VueDX.internal.checkModelDirectiveForDOM.select(', dirLoc)
+      context.write(
+        'VueDX.internal.checkModelDirectiveForDOM.select(',
+        dirLoc,
+        MappingKind.reverseOnly,
+      )
     } else {
       context.write(
         `VueDX.internal.checkModelDirective(${componentName}, `,
         dirLoc,
+        MappingKind.reverseOnly,
       )
     }
   } else if (dir.name === 'on') {
-    context.write(`VueDX.internal.checkOnDirective(`, dirLoc)
-    context.write(`${componentName})(`, nodeLoc)
+    context.write(
+      `VueDX.internal.checkOnDirective(`,
+      dirLoc,
+      MappingKind.reverseOnly,
+    )
+    context.write(`${componentName})(`, nodeLoc, MappingKind.reverseOnly)
   } else if (builtins.directives.has(dir.name)) {
     context.write(
       `VueDX.internal.checkBuiltinDirective["${dir.name}"](`,
       dirLoc,
+      MappingKind.reverseOnly,
     )
-    context.write(`${componentName}, `, nodeLoc)
+    context.write(`${componentName}, `, nodeLoc, MappingKind.reverseOnly)
   } else {
-    context.write(`VueDX.internal.checkDirective(`, dirLoc)
+    context.write(
+      `VueDX.internal.checkDirective(`,
+      dirLoc,
+      MappingKind.reverseOnly,
+    )
     context.write(`${directiveName}, `, dirLoc)
-    context.write(`${componentName}, `, nodeLoc)
+    context.write(`${componentName}, `, nodeLoc, MappingKind.reverseOnly)
   }
 
   genDirectiveUsage(context, directives, isInputModelDirective)

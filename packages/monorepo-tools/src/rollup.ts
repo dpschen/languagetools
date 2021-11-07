@@ -1,6 +1,8 @@
 import json from '@rollup/plugin-json'
 import type { BuildOptions as ESBuildOptions } from 'esbuild'
+import glob from 'fast-glob'
 import * as FS from 'fs'
+import * as OS from 'os'
 import * as Path from 'path'
 import type { OutputOptions, Plugin, RollupOptions } from 'rollup'
 import dts from 'rollup-plugin-dts'
@@ -14,7 +16,9 @@ import type {
 } from 'typescript'
 import { inspect } from 'util'
 import { esbuild } from './rollup-plugin-esbuild'
-import glob from 'fast-glob'
+import filesize from 'rollup-plugin-filesize'
+import Table from 'as-table'
+import chalk from 'chalk'
 
 export type BuildKind = 'dts' | 'bundle'
 export type ExtendedOutputOptions = (
@@ -66,11 +70,22 @@ export interface GenerateOptions {
   extend(kind: BuildKind, info: PackageInfo): RollupOptions | RollupOptions[]
 }
 
+interface StatEntry {
+  Package: string
+  Filename: string
+  Format: string
+  Size: string
+  Minified: string
+  Gzipped: string
+  Brotli: string
+}
+
 export function generateRollupOptions(
   options: GenerateOptions,
 ): RollupOptions[] {
   const typeConfigs: RollupOptions[] = []
   const configs: RollupOptions[] = []
+  const stats: StatEntry[] = []
 
   const packagesDir =
     options.rootDir != null
@@ -84,17 +99,27 @@ export function generateRollupOptions(
     options.dirPatterns ?? ['**'],
   )
 
+  const aliases = {
+    commonjs: ['cjs', 'node'],
+    module: ['es', 'esm'],
+  }
   const filterByFormat = createFilter<ExtendedOutputOptions>(
+    'formats',
     process.env['BUILD_FORMATS'],
-    (value) => [value.format],
+    (value) => [
+      value.format,
+      ...(aliases[(value.format as unknown) as keyof typeof aliases] ?? []),
+    ],
   )
 
   const filterBySource = createFilter<string>(
+    'sources',
     process.env['BUILD_SOURCES'],
     (value) => [value],
   )
 
   const filterByPackageName = createFilter<string>(
+    'packages',
     process.env['BUILD_PACKAGES'],
     (value) => [resolvedPackages.get(value)?.name, value],
   )
@@ -169,6 +194,11 @@ export function generateRollupOptions(
     Object.entries(sources)
       .filter(([input]) => filterBySource(input))
       .forEach(([input, outputs]) => {
+        const invalidationFile = Path.resolve(
+          OS.tmpdir(),
+          'rollup-plugin-esbuild',
+          `build_${Date.now()}.js`,
+        )
         const types = Array.from(outputs)
           .filter(filterByFormat)
           .filter((output) => output.format === 'dts')
@@ -179,6 +209,7 @@ export function generateRollupOptions(
             format: 'module',
           }))
 
+        let needsESBuild = false
         const bundles = Array.from(outputs)
           .filter(filterByFormat)
           .filter(
@@ -188,22 +219,26 @@ export function generateRollupOptions(
               bundle?: boolean | ESBuildOptions
             } => output.format !== 'dts',
           )
-          .map<OutputOptions>(({ bundle, ...output }) => ({
-            sourcemap: true,
-            preferConst: true,
-            exports: 'auto',
-            ...output,
-            file: output.file != null ? project(output.file) : output.file,
-            plugins:
-              bundle != null && bundle !== false
-                ? [
-                    esbuild(bundle, () => {
-                      // TODO: Get final external option.
-                      return external
-                    }),
-                  ]
-                : [],
-          }))
+          .map<OutputOptions>(({ bundle, ...output }) => {
+            needsESBuild = needsESBuild || (bundle != null && bundle !== false)
+
+            return {
+              sourcemap: true,
+              preferConst: true,
+              exports: 'auto',
+              ...output,
+              file: output.file != null ? project(output.file) : output.file,
+              plugins:
+                bundle != null && bundle !== false
+                  ? [
+                      esbuild(invalidationFile, bundle, () => {
+                        // TODO: Get final external option.
+                        return external
+                      }),
+                    ]
+                  : [],
+            }
+          })
 
         const relInput = Path.relative(process.cwd(), project(input))
         const packageRoot = project('.')
@@ -240,10 +275,69 @@ export function generateRollupOptions(
               output: bundles,
               external: external.slice(),
               plugins: [],
+              watch: {
+                clearScreen: false,
+              },
             },
           })
 
-          configs.push(...(Array.isArray(config) ? config : [config]))
+          const result = Array.isArray(config) ? config : [config]
+          result.forEach((item) => {
+            if (item.plugins == null) item.plugins = []
+
+            item.plugins.push({
+              name: 'esbuild:watcher',
+              options() {
+                if (this.meta.watchMode && needsESBuild) {
+                  if (!FS.existsSync(invalidationFile)) {
+                    FS.mkdirSync(Path.dirname(invalidationFile), {
+                      recursive: true,
+                    })
+                    FS.writeFileSync(invalidationFile, `// ${Date.now()}\n`)
+                  }
+                }
+
+                return undefined
+              },
+              transform() {
+                if (this.meta.watchMode) {
+                  this.addWatchFile(invalidationFile)
+                }
+                return undefined
+              },
+            })
+
+            item.plugins.push({
+              name: 'stats',
+              async generateBundle(...args) {
+                if (!this.meta.watchMode) {
+                  await filesize({
+                    showBrotliSize: true,
+                    showGzippedSize: true,
+                    showMinifiedSize: true,
+                    reporter: (
+                      _opitons,
+                      bundle,
+                      { fileName, bundleSize, minSize, gzipSize, brotliSize },
+                    ) => {
+                      stats.push({
+                        Package: packageJson.name ?? packageName,
+                        Filename: chalk.gray(fileName),
+                        Format: chalk.gray(bundle.format?.toUpperCase() ?? ''),
+                        Size: chalk.gray(bundleSize),
+                        Minified: minSize,
+                        Gzipped: renderSize(gzipSize),
+                        Brotli: renderSize(brotliSize),
+                      })
+
+                      return ''
+                    },
+                  }).generateBundle?.apply(this, args)
+                }
+              },
+            })
+          })
+          configs.push(...result)
         }
       })
   })
@@ -253,6 +347,16 @@ export function generateRollupOptions(
   if (process.env['DEBUG'] === 'rollup-monorepo-utils') {
     console.log('Generated rollup configs:', inspect(configs, false, 4))
   }
+
+  process.addListener('beforeExit', () => {
+    if (stats.length > 0) {
+      stats.sort((a, b) => a.Format.localeCompare(b.Format))
+      console.log()
+      console.log(' 📝 Summary')
+      console.log()
+      console.log(Table(stats))
+    }
+  })
 
   return [...typeConfigs, ...configs]
 }
@@ -351,17 +455,57 @@ function getTSConfig(configFile: string): CompilerOptions {
 }
 
 function createFilter<T>(
+  name: string,
   matchRE: string | undefined,
   getter: (value: T) => Array<string | undefined>,
 ): (value: T) => boolean {
   if (matchRE == null) return () => true
 
   const RE = matchRE.startsWith('/')
-    ? new RegExp(matchRE.substring(1, matchRE.lastIndexOf('/')))
-    : new RegExp(matchRE, 'i')
+    ? new RegExp(
+        matchRE.substring(1, matchRE.lastIndexOf('/')),
+        matchRE.substr(matchRE.lastIndexOf('/') + 1),
+      )
+    : new RegExp(`(${matchRE})`, 'i')
+
+  console.debug(
+    chalk.gray(
+      `Filter ${name}: /${chalk.green(RE.source)}/${chalk.white(RE.flags)}`,
+    ),
+  )
 
   return (value) =>
     getter(value)
       .filter((id): id is string => id != null)
       .some((id) => RE.test(id))
+}
+
+function renderSize(
+  size: string,
+  warnSize = 2 * 1024,
+  errSize = warnSize * 10,
+): string {
+  const bytes = calculateByteSize(size)
+
+  if (bytes > errSize) return chalk.red(size)
+  if (bytes > warnSize) return chalk.yellow(size)
+  return chalk.green(size)
+}
+
+function calculateByteSize(value: string): number {
+  const parts = value.split(' ')
+  if (parts.length < 2) throw new Error(`Invalid Value`)
+  const [num, unit] = parts as [string, string]
+
+  switch (unit) {
+    case 'KB':
+      return parseFloat(num) * 1e3
+    case 'MB':
+      return parseFloat(num) * 1e6
+    case 'GB':
+      return parseFloat(num) * 1e9
+    case 'B':
+    default:
+      return parseFloat(num)
+  }
 }

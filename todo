@@ -1,0 +1,115 @@
+- [ ] Handle unsupported charaters in JSX attributeName
+      which are allowed in HTML attribute name
+- [ ] Create `v-slot` transform
+- [ ] Create `<component is>` transform
+- [ ] Create `<slot>` tranform
+- [ ] Create `<template v-for/v-if>` tranform
+- [ ] Use TypeScript in analyze package
+- [ ] Organize imports is broken in `<script setup>`
+- [ ] `vuedx.openVirtualFile` is broken
+- [ ] `defineProp()` typeonly is not working
+- [x] Ignore type declarations in findIdentifiers - Maybe search for top-level declaration statements
+- [ ] Add test for organize imports
+- [ ] Extract api-extractor.json to a base file
+
+## Language Features
+
+- [ ] completion
+- [ ] completion resolve
+- [ ] hover
+- [ ] signatureHelp
+- [ ] declaration
+- [ ] definition
+- [ ] typeDefinition
+- [ ] implementation
+- [ ] references
+- [ ] documentHighlight
+- [ ] documentSymbol
+- [ ] codeAction
+- [ ] codeAction resolve
+- [ ] codeLens
+- [ ] codeLens resolve
+- [ ] codeLens refresh
+- [ ] documentLink
+- [ ] documentLink resolve
+- [ ] documentColor
+- [ ] colorPresentation
+- [ ] formatting
+- [ ] rangeFormatting
+- [ ] onTypeFormatting
+- [ ] rename
+- [ ] prepareRename
+- [ ] foldingRange
+- [ ] selectionRange
+- [ ] prepareCallHierarchy
+- [ ] callHierarchy incoming
+- [ ] callHierarchy outgoing
+- [ ] semantic tokens
+- [ ] linkedEditingRange
+- [ ] moniker
+
+## TypeScript
+
+- [ ] getFileReferences
+- [ ] toggleLineComment
+- [ ] toggleMultilineComment
+- [ ] commentSelection
+- [ ] uncommentSelection
+- [ ] getRenameInfo
+- [ ] findRenameLocations
+- [ ] getApplicableRefactors
+- [ ] getBraceMatchingAtPosition
+- [ ] getBreakpointStatementAtPosition
+- [ ] getCodeFixesAtPosition
+- [ ] getCombinedCodeFix
+- [ ] getCompilerOptionsDiagnostics
+- [ ] getCompletionEntryDetails
+- [ ] getCompletionEntrySymbol
+- [ ] getCompletionsAtPosition
+- [ ] getDefintionAtPosition
+- [ ] getDefinitionAndBoundSpan
+- [ ] getDocCommentTemplateAtPosition
+- [ ] getDocumentHighlights
+- [ ] getEditsForFileRename
+- [ ] getEditsForRefactor
+- [ ] getEmitOutput
+- [ ] getEncodedSemanticClassifications
+- [ ] getEncodedSyntacticClassifications
+- [ ] getFormattingEditsForDocument
+- [ ] getFormattingEditsForRange
+- [ ] getImplementationAtPosition
+- [ ] getIndentationAtPosition
+- [ ] getJsxClosingTagAtPosition
+- [ ] getNameOrDottedNameSpan
+- [ ] getNavigateToItems
+- [ ] getNavigationBarItems
+- [ ] getNavigationTree
+- [ ] getOccurrencesAtPosition
+- [ ] getOutliningSpans
+- [ ] getQuickInfoAtPosition
+- [ ] getReferencesAtPosition
+- [ ] getSemanticClassifications
+- [ ] getSyntacticClassifications
+- [ ] getSemanticDiagnostics
+- [ ] getSuggestionDiagnostics
+- [ ] getSyntacticDiagnostics
+- [ ] getSignatureHelpItems
+- [ ] getSmartSelectionRange
+- [ ] getSpanOfEnclosingComment
+- [ ] getTodoComments
+- [ ] getTypeDefinitionAtPosition
+- [ ] findRefences
+- [ ] prepareCallHierarchy
+- [ ] provideCallHierarchyIncomingCalls
+- [ ] provideCallHierarchyOutgoingCalls
+- [ ] isValidBraceCompletionAtPosition
+- [ ] organizeImports
+- [ ] applyCodeActionCommand
+
+--- --- --- ---
+Pick from:
+- Provide fallback `<script>` 
+
+-----
+- Import suggestions path should end in .vue
+- 

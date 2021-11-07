@@ -41,11 +41,14 @@
   },
   "dependencies": {
     "@rollup/plugin-json": "^4.1.0",
+    "as-table": "^1.0.55",
     "builtins": "^4.0.0",
+    "chalk": "^4.1.2",
     "esbuild": "^0.12.6",
     "fast-glob": "^3.2.5",
     "resolve": "^1.20.0",
-    "rollup-plugin-dts": "^3.0.2",
+    "rollup-plugin-dts": "github:znck/rollup-plugin-dts#master",
+    "rollup-plugin-filesize": "^9.1.1",
     "topological-sort": "^0.3.0"
   },
   "scripts": {

@@ -6,7 +6,7 @@ import type {
   SFCTemplateBlock,
 } from '@vuedx/compiler-sfc'
 import { CompilerError, parse } from '@vuedx/compiler-sfc'
-import { getComponentName, isNotNull } from '@vuedx/shared'
+import { createCache, getComponentName, isNotNull } from '@vuedx/shared'
 import { isPlainElementNode, RootNode } from '@vuedx/template-ast-types'
 import * as Path from 'path'
 import { parse as parseQueryString } from 'querystring'
@@ -21,6 +21,8 @@ import { VueBlockDocument } from './VueBlockDocument'
 export interface VueSFCDocumentOptions {
   transformers?: Record<string, BlockTransformer>
 }
+
+const cache = createCache<string, Readonly<ReturnType<typeof parse>>>()
 
 export class VueSFCDocument extends ProxyDocument {
   private readonly _tsFileName: string
@@ -190,17 +192,28 @@ export class VueSFCDocument extends ProxyDocument {
 
   private _parse(): SFCDescriptor {
     if (this._descriptor == null || this._isDirty) {
-      if (this._descriptor == null) {
-        console.debug(`[VueDX] (SFC) Parse: ${this.fileName}`)
-      } else {
-        console.debug(`[VueDX] (SFC) Re-parse: ${this.fileName}`)
-      }
+      this._isDirty = false
+      let isChanged = false
       // TODO: Incremental SFC Parser using
-      const result = parse(this.source.getText(), {
-        sourceMap: false,
-        filename: this.fileName,
-        pad: false,
+      const result = cache.resolve(this.source.getText(), (text) => {
+        isChanged = true
+        console.debug(`[VueDX] (SFC) Parse (cache miss): ${this.fileName}`)
+        const result = parse(text, {
+          sourceMap: false,
+          pad: false,
+        })
+
+        if (
+          result.descriptor.script == null &&
+          result.descriptor.scriptSetup == null
+        ) {
+          result.descriptor.script = this.fallbackScript
+        }
+
+        return result
       })
+
+      if (this._descriptor != null && !isChanged) return this._descriptor
 
       if (this._descriptor != null) {
         // Delete stale documents.
@@ -257,20 +270,12 @@ export class VueSFCDocument extends ProxyDocument {
         })
       }
 
-      if (
-        result.descriptor.script == null &&
-        result.descriptor.scriptSetup == null
-      ) {
-        result.descriptor.script = this.fallbackScript
-      }
-
       const code = this._generateMainModuleText(result.descriptor)
 
       this._descriptor = result.descriptor
       this._errors = result.errors
       this._mainText = code.content
       this._activeTSDocIDs = code.files
-      this._isDirty = false
       console.debug(
         `[VueDX] (SFC) New Files: ${JSON.stringify(
           Array.from(code.files),
@@ -462,11 +467,13 @@ export class VueSFCDocument extends ProxyDocument {
     changes: TextDocumentContentChangeEvent[],
     version: number,
   ): void {
+    const previous = this.version
+    if (version <= previous) version = previous + 1
     this.source = TextDocument.update(this.source, changes, version)
     this._isDirty = true
     this.lineMap = undefined
     console.debug(
-      `[VueDX] (SFC) ${this.version} ${this.fileName}  is marked dirty`,
+      `[VueDX] (SFC) ${previous} -> ${this.version} ${this.fileName}  is marked dirty`,
     )
   }
 }

@@ -17,6 +17,12 @@ importers:
     dependencies:
       vue: 3.2.1
 
+  vue3/javascript-diagnostics:
+    specifiers:
+      vue: ^3.2
+    dependencies:
+      vue: 3.2.1
+
   vue3/javascript-unconfigured:
     specifiers:
       vue: ^3.2

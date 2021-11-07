@@ -3,7 +3,7 @@ import { a, A } from './a'
 import AA, { aa } from './A.vue'
 </script>
 
-<script lang="ts">
+<script>
 export const bb = 1
 </script>
 

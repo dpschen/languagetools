@@ -12,43 +12,59 @@ import { Installable } from '../utils/installable'
 export class DocumentService extends Installable {
   private readonly emitter = new vscode.EventEmitter<{ uri: vscode.Uri }>()
   private readonly documents = new Map<string, VueSFCDocument>()
+  private readonly openVirtualDocuments = new Set<string>()
 
   public install(): vscode.Disposable {
     super.install()
 
     return vscode.Disposable.from(
       this.emitter,
-      vscode.workspace.onDidChangeTextDocument(async (event) => {
-        if (event.document.languageId === 'vue') {
-          const uri = event.document.uri
-          const fileName = uri.toString()
-
-          const doc = this.getVueDocument(fileName)
-          if (doc != null) {
-            doc.update(
-              [{ text: event.document.getText() }],
-              event.document.version,
-            )
-            doc.getActiveTSDocIDs().forEach((id) =>
-              this.emitter.fire({
-                uri: this.getVirtualFileUri(id),
-              }),
-            )
-          }
+      vscode.workspace.onDidChangeTextDocument(async ({ document }) => {
+        if (document.languageId === 'vue') {
+          const fileName = this.createVueDocument(document).fileName
+          this.openVirtualDocuments.forEach((virtual) => {
+            if (this.removeVirtualFileQuery(virtual) === fileName) {
+              this.emitter.fire({ uri: this.getVirtualFileUri(virtual) })
+            }
+          })
         }
       }),
-      vscode.workspace.onDidOpenTextDocument(async (text) => {
-        if (text.languageId === 'vue') {
-          const uri = text.uri
-          const fileName = uri.fsPath
-          const document = VueSFCDocument.create(fileName, text.getText(), {
-            transformers,
-          })
-
-          this.documents.set(fileName, document)
+      vscode.workspace.onDidOpenTextDocument(async (document) => {
+        if (document.languageId === 'vue') {
+          this.createVueDocument(document)
+        } else if (document.uri.scheme === 'vue') {
+          this.openVirtualDocuments.add(
+            document.uri.with({ scheme: 'file' }).fsPath,
+          )
+        }
+      }),
+      vscode.workspace.onDidCloseTextDocument(async (document) => {
+        if (document.uri.scheme === 'vue') {
+          this.openVirtualDocuments.delete(
+            document.uri.with({ scheme: 'file' }).fsPath,
+          )
         }
       }),
     )
+  }
+
+  private createVueDocument(document: vscode.TextDocument): VueSFCDocument {
+    const fileName = document.uri.fsPath
+    const file = this.documents.get(fileName)
+    if (file != null) {
+      file.update([{ text: document.getText() }], document.version)
+      console.log('Update: ' + fileName, document.version)
+      return file
+    } else {
+      const file = VueSFCDocument.create(
+        fileName,
+        document.getText(),
+        {},
+        document.version,
+      )
+      this.documents.set(fileName, file)
+      return file
+    }
   }
 
   private getVirtualFileUri(fileName: string): vscode.Uri {

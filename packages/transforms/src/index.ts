@@ -8,6 +8,12 @@ interface ParseOptions extends ParserOptions {
   lang: string
 }
 
+class SyntaxError extends Error {
+  constructor(public readonly pos: number, message: string) {
+    super(message)
+  }
+}
+
 export function toAST(
   code: string,
   options: Partial<ParseOptions> = {},
@@ -43,7 +49,15 @@ export function toAST(
 
   finalOptions.plugins = Array.from(new Set(finalOptions.plugins))
 
-  return parse(code, finalOptions) as T.File
+  try {
+    return parse(code, finalOptions) as T.File
+  } catch (error) {
+    if (typeof error.pos === 'number') {
+      throw new SyntaxError(error.pos, error.reasonCode)
+    }
+
+    throw error
+  }
 }
 
 export function toCode(

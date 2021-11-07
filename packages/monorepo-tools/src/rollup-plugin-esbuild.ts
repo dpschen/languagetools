@@ -1,3 +1,16 @@
+// @ts-expect-error
+import builtins from 'builtins'
+import {
+  build,
+  BuildOptions,
+  BuildResult,
+  OutputFile,
+  PartialMessage,
+  version,
+} from 'esbuild'
+import * as FS from 'fs'
+import * as Path from 'path'
+import resolveModule from 'resolve'
 import type {
   ExternalOption,
   ModuleFormat,
@@ -5,19 +18,19 @@ import type {
   OutputOptions,
   Plugin,
 } from 'rollup'
-// @ts-expect-error
-import builtins from 'builtins'
-import { build, BuildOptions, PartialMessage, version } from 'esbuild'
-import * as Path from 'path'
-import * as FS from 'fs'
-import resolveModule from 'resolve'
+
+type ESBuildResult = BuildResult & {
+  outputFiles: OutputFile[]
+}
 
 export function esbuild(
+  invalidationFile: string,
   config: boolean | BuildOptions,
   getExternal: () => ExternalOption | undefined,
 ): Plugin {
   let format: 'iife' | 'cjs' | 'esm' = 'esm'
   let outputOptions!: OutputOptions
+  const watchers: Record<string, ESBuildResult> = {}
 
   return {
     name: 'esbuild',
@@ -49,6 +62,7 @@ export function esbuild(
         format: 'esm',
       }
     },
+
     async generateBundle(options, bundle) {
       const defaults: BuildOptions = typeof config === 'boolean' ? {} : config
 
@@ -58,13 +72,14 @@ export function esbuild(
         throw new Error(`'bundle' is supported only for 'file' output`)
       }
 
-      const fileName = options.file
+      const outputFileName = options.file
       const key = Path.basename(options.file)
       const file = bundle[key]
-
-      if (fileName == null || file == null || file.type === 'asset') {
+      const isWatching = this.meta.watchMode
+      if (outputFileName == null || file == null || file.type === 'asset') {
         throw new Error(`'${key}' is not found in bundle`)
       }
+      const entryFileName = Path.resolve(Path.dirname(options.file), '.' + key)
 
       const externals = new Set(defaults.external)
 
@@ -72,110 +87,135 @@ export function esbuild(
         builtins().forEach((value: string) => externals.add(value))
       }
 
-      const result = await build({
-        bundle: true,
-        splitting: false,
-        preserveSymlinks: true,
-        format: format,
-        platform: 'node',
-        external: [],
-        mainFields: ['module', 'main'],
-        allowOverwrite: true,
-        banner: { js: `/* Bundled with ESBuild v${version} */` },
-        outfile: fileName,
-        treeShaking: true,
-        resolveExtensions: ['.mjs', '.js', '.cjs'],
-        ...defaults,
-        sourcemap: 'external',
-        entryPoints: [fileName],
-        plugins: [
-          {
-            name: 'rollup',
-            setup: (build) => {
-              build.onResolve({ filter: /.+/ }, async ({ path, importer }) => {
-                if (path === options.file) {
-                  return { path: options.file }
-                }
+      const isFirstBuild = watchers[options.file] == null
+      let isBuilding = true
+      let result =
+        watchers[options.file] ??
+        (await build({
+          bundle: true,
+          splitting: false,
+          preserveSymlinks: true,
+          format: format,
+          platform: 'node',
+          external: [],
+          mainFields: ['module', 'main'],
+          allowOverwrite: true,
+          banner: { js: `/* Bundled with ESBuild v${version} */` },
+          outfile: outputFileName,
+          treeShaking: true,
+          resolveExtensions: ['.mjs', '.js', '.cjs'],
+          ...defaults,
+          sourcemap: 'external',
+          entryPoints: [entryFileName],
+          plugins: [
+            {
+              name: 'rollup',
+              setup: (build) => {
+                build.onResolve(
+                  { filter: /.+/ },
+                  async ({ path, importer }) => {
+                    if (path === entryFileName) {
+                      return { path: entryFileName }
+                    }
 
-                if (path === `${fileName}.map`) {
-                  return { path: `${fileName}.map` }
-                }
+                    if (path === `${entryFileName}.map`) {
+                      return { path: `${entryFileName}.map` }
+                    }
 
-                if (externals.has(path)) {
-                  return { path, external: true }
-                }
+                    if (externals.has(path)) {
+                      return { path, external: true }
+                    }
 
-                let external = isExternal(getExternal(), path, importer)
-                let resolved: string | undefined
-                const warnings: PartialMessage[] = []
-                let id = path
-                const fromRollup = await this.resolve(id, importer)
+                    let external = isExternal(getExternal(), path, importer)
+                    let resolved: string | undefined
+                    const warnings: PartialMessage[] = []
+                    let id = path
+                    const fromRollup = await this.resolve(id, importer)
 
-                if (fromRollup != null) {
-                  resolved = fromRollup.id
-                  external =
-                    fromRollup.external === 'absolute'
-                      ? false
-                      : fromRollup.external
+                    if (fromRollup != null) {
+                      resolved = fromRollup.id
+                      external =
+                        fromRollup.external === 'absolute'
+                          ? false
+                          : fromRollup.external
 
-                  if (!Path.isAbsolute(resolved)) {
-                    id = resolved
-                    external = true
+                      if (!Path.isAbsolute(resolved)) {
+                        id = resolved
+                        external = true
+                      }
+                    }
+
+                    if (fromRollup == null || external) {
+                      resolved = await resolveExternalPackage(id, importer)
+                      if (resolved == null) {
+                        external = true
+                        resolved = id
+                      } else {
+                        external = false
+                      }
+                    }
+
+                    if (resolved != null && Path.isAbsolute(resolved)) {
+                      resolved = FS.realpathSync(resolved)
+                    }
+
+                    if (external) {
+                      warnings.push({
+                        text: `Module "${path}" is treated as external dependency`,
+                      })
+                    }
+
+                    return {
+                      external,
+                      path: resolved,
+                      warnings,
+                    }
+                  },
+                )
+                build.onLoad({ filter: /.+/ }, async ({ path }) => {
+                  if (path === entryFileName) {
+                    return {
+                      contents: file.code + getSourceMapString(file),
+                      resolveDir: Path.basename(path),
+                      loader: 'js',
+                    }
                   }
-                }
 
-                if (fromRollup == null || external) {
-                  resolved = await resolveExternalPackage(id, importer)
-                  if (resolved == null) {
-                    external = true
-                    resolved = id
-                  } else {
-                    external = false
+                  if (path === `${entryFileName}.map` && file.map != null) {
+                    return {
+                      contents: file.map.toString(),
+                      resolveDir: Path.basename(path),
+                      loader: 'js',
+                    }
                   }
-                }
 
-                if (resolved != null && Path.isAbsolute(resolved)) {
-                  resolved = FS.realpathSync(resolved)
-                }
-
-                if (external) {
-                  warnings.push({
-                    text: `Module "${path}" is treated as external dependency`,
-                  })
-                }
-
-                return {
-                  external,
-                  path: resolved,
-                  warnings,
-                }
-              })
-              build.onLoad({ filter: /.+/ }, async ({ path }) => {
-                if (path === fileName) {
-                  return {
-                    contents: file.code + getSourceMapString(file),
-                    resolveDir: Path.basename(path),
-                    loader: 'js',
-                  }
-                }
-
-                if (path === `${fileName}.map` && file.map != null) {
-                  return {
-                    contents: file.map.toString(),
-                    resolveDir: Path.basename(path),
-                    loader: 'js',
-                  }
-                }
-
-                return undefined
-              })
+                  return undefined
+                })
+              },
             },
-          },
-        ],
-        write: false,
-        watch: false,
-      })
+          ],
+          write: false,
+          incremental: isWatching,
+          watch: isWatching
+            ? {
+                onRebuild: (_error, _result) => {
+                  if (!isBuilding) {
+                    FS.writeFileSync(invalidationFile, `// ${Date.now()} \n`)
+                  }
+                },
+              }
+            : false,
+        }))
 
+      if (!isFirstBuild && result.rebuild != null) {
+        result = (await result.rebuild()) as ESBuildResult
+      }
+
+      if (isWatching) {
+        watchers[options.file] = result
+      }
+
+      isBuilding = false
       result.errors.forEach((error) => {
         this.error({
           message: error.text,
@@ -205,9 +245,9 @@ export function esbuild(
       })
 
       result.outputFiles.forEach((outFile) => {
-        if (outFile.path === options.file) {
+        if (outFile.path === outputFileName) {
           file.code = outFile.text
-        } else if (outFile.path === `${fileName}.map`) {
+        } else if (outFile.path === `${outputFileName}.map`) {
           file.map = {
             ...JSON.parse(outFile.text),
             toString() {

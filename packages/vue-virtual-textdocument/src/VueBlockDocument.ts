@@ -67,7 +67,7 @@ export class VueBlockDocument {
     this.source = TextDocument.create(
       id,
       Path.posix.extname(id).substr(1),
-      0,
+      parent.version,
       block.content,
     )
     this.sourceMap = null
@@ -107,7 +107,7 @@ export class VueBlockDocument {
         this.generated = TextDocument.create(
           this.tsFileName,
           tsLang, // TODO: Convert to vscode lang
-          0,
+          this.source.version,
           code,
         )
 
@@ -163,12 +163,13 @@ export class VueBlockDocument {
           this.templateGlobals = { start, end }
         }
       } catch (error) {
+        const hasPosition = typeof error['pos'] === 'number'
         this.errors = [
           {
             code: 1,
             message: error.message,
             severity: 'error',
-            start: block.loc.start.offset,
+            start: hasPosition ? error['pos'] : 0,
             length: 1,
             source: 'SFC/VirtualDocument',
           },
